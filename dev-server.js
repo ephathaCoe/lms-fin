@@ -9,7 +9,7 @@ const __dirname = path.dirname(__filename);
 
 async function createServer() {
   const app = express();
-  const PORT = process.env.PORT || 3000;
+  const PORT = process.env.PORT || 5173;
 
   // Create Vite server in middleware mode for hot-reloading
   const vite = await createViteServer({
@@ -22,10 +22,10 @@ async function createServer() {
   app.use(vite.middlewares);
 
   // Start the backend server as a child process on a different port
-  const serverProcess = spawn('node', ['index.js'], {
-    cwd: path.join(__dirname, 'server'),
+  const serverProcess = spawn('node', ['server/index.js'], {
+    cwd: __dirname,
     stdio: 'inherit',
-    env: { ...process.env, PORT: 3001 } // Changed to 3001 to avoid port conflict
+    env: { ...process.env, PORT: 3000 }
   });
 
   // Handle server process exit
