@@ -19,7 +19,7 @@ function App() {
           <Routes>
             <Route path="/login" element={<Login />} />
             <Route path="/register" element={<Register />} />
-            <Route path="/" element={<Navigate replace to="/login" />} />
+            <Route path="/" element={<Navigate replace to="/dashboard" />} />
             <Route path="/dashboard" element={<PrivateRoute><Dashboard /></PrivateRoute>} />
             <Route path="/loan-applications" element={<PrivateRoute><LoanApplications /></PrivateRoute>} />
             <Route path="/cash-flow" element={<PrivateRoute><CashFlow /></PrivateRoute>} />

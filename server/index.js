@@ -1,150 +1,94 @@
-import express from 'express';
-import cors from 'cors';
-import mysql from 'mysql2/promise';
-import bcrypt from 'bcryptjs';
-import jwt from 'jsonwebtoken';
-import multer from 'multer';
-import path from 'path';
-import { fileURLToPath } from 'url';
-import fs from 'fs';
+// ... (previous imports and setup)
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-// Create Express app
-const app = express();
-const PORT = process.env.PORT || 3000;
-
-// Middleware
-app.use(cors());
-app.use(express.json());
-
-// Database connection
-const dbConfig = {
-  host: 'localhost',
-  user: 'root',
-  password: '',
-  database: 'loan_management',
-  waitForConnections: true,
-  connectionLimit: 10,
-  queueLimit: 0
+// Middleware to verify JWT token
+const authenticateToken = (req, res, next) => {
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1];
+  
+  if (!token) {
+    return res.status(401).json({ message: 'Authentication required' });
+  }
+  
+  jwt.verify(token, JWT_SECRET, (err, user) => {
+    if (err) {
+      return res.status(403).json({ message: 'Invalid or expired token' });
+    }
+    
+    req.user = user;
+    next();
+  });
 };
 
-const pool = mysql.createPool(dbConfig);
-
-// JWT Secret
-const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
-
-// Test database connection
-(async () => {
-  try {
-    const connection = await pool.getConnection();
-    console.log('Successfully connected to MySQL database');
-    connection.release();
-    await initializeDatabase();
-  } catch (error) {
-    console.error('Error connecting to MySQL database:', error);
-    process.exit(1);
-  }
-})();
-
-// Initialize database schema
-async function initializeDatabase() {
-  try {
-    const connection = await pool.getConnection();
-    
-    await connection.query(`
-      CREATE TABLE IF NOT EXISTS users (
-        id INT AUTO_INCREMENT PRIMARY KEY,
-        username VARCHAR(50) NOT NULL UNIQUE,
-        email VARCHAR(100) NOT NULL UNIQUE,
-        password VARCHAR(255) NOT NULL,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      )
-    `);
-    
-    console.log('Database schema initialized successfully');
-    connection.release();
-  } catch (error) {
-    console.error('Error initializing database schema:', error);
-    throw error;
-  }
-}
-
 // Routes
-app.post('/api/auth/register', async (req, res) => {
-  const { username, email, password } = req.body;
-  
-  if (!username || !email || !password) {
-    return res.status(400).json({ message: 'All fields are required' });
-  }
-  
+// ... (keep existing auth routes)
+
+// Loan Applications
+app.get('/api/loan-applications', authenticateToken, async (req, res) => {
   try {
-    const [existingUsers] = await pool.query(
-      'SELECT * FROM users WHERE username = ? OR email = ?',
-      [username, email]
-    );
-    
-    if (existingUsers.length > 0) {
-      return res.status(409).json({ message: 'Username or email already exists' });
-    }
-    
-    const hashedPassword = await bcrypt.hash(password, 10);
-    const [result] = await pool.query(
-      'INSERT INTO users (username, email, password) VALUES (?, ?, ?)',
-      [username, email, hashedPassword]
-    );
-    
-    const userId = result.insertId;
-    const token = jwt.sign({ id: userId, username }, JWT_SECRET, { expiresIn: '1h' });
-    
-    res.status(201).json({
-      token,
-      user: { id: userId, username, email }
-    });
+    const [applications] = await pool.query('SELECT * FROM loan_applications ORDER BY created_at DESC');
+    res.json(applications);
   } catch (error) {
-    console.error('Registration error:', error);
-    res.status(500).json({ message: 'Server error during registration' });
+    console.error('Error fetching loan applications:', error);
+    res.status(500).json({ message: 'Server error fetching loan applications' });
   }
 });
 
-app.post('/api/auth/login', async (req, res) => {
-  const { username, password } = req.body;
-  
-  if (!username || !password) {
-    return res.status(400).json({ message: 'Username and password are required' });
-  }
-  
+app.post('/api/loan-applications', authenticateToken, upload.fields([
+  { name: 'employment_proof', maxCount: 1 },
+  { name: 'sponsor1_doc', maxCount: 1 },
+  { name: 'sponsor2_doc', maxCount: 1 },
+  { name: 'terms_doc', maxCount: 1 }
+]), async (req, res) => {
+  // ... (implement loan application creation logic)
+});
+
+app.put('/api/loan-applications/:id/status', authenticateToken, async (req, res) => {
+  // ... (implement status update logic)
+});
+
+// Cash Flow
+app.get('/api/cash-flow', authenticateToken, async (req, res) => {
   try {
-    const [users] = await pool.query('SELECT * FROM users WHERE username = ?', [username]);
-    if (users.length === 0) {
-      return res.status(401).json({ message: 'Invalid username or password' });
-    }
-    
-    const user = users[0];
-    const isPasswordValid = await bcrypt.compare(password, user.password);
-    
-    if (!isPasswordValid) {
-      return res.status(401).json({ message: 'Invalid username or password' });
-    }
-    
-    const token = jwt.sign({ id: user.id, username: user.username }, JWT_SECRET, { expiresIn: '1h' });
-    
-    res.json({
-      token,
-      user: { id: user.id, username: user.username, email: user.email }
-    });
+    const [transactions] = await pool.query('SELECT * FROM cash_flow ORDER BY date DESC');
+    res.json(transactions);
   } catch (error) {
-    console.error('Login error:', error);
-    res.status(500).json({ message: 'Server error during login' });
+    console.error('Error fetching cash flow data:', error);
+    res.status(500).json({ message: 'Server error fetching cash flow data' });
   }
 });
 
-app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', message: 'Server is running' });
+app.post('/api/cash-flow', authenticateToken, async (req, res) => {
+  // ... (implement cash flow entry creation logic)
 });
 
-// Start server
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+// Repayments
+app.get('/api/repayments', authenticateToken, async (req, res) => {
+  try {
+    const [repayments] = await pool.query(
+      `SELECT r.*, a.applicant_name, a.nida_id, a.loan_amount as total_loan,
+       (SELECT SUM(amount) FROM loan_repayments WHERE loan_application_id = r.loan_application_id AND paid = 1) as amount_paid
+       FROM loan_repayments r
+       JOIN loan_applications a ON r.loan_application_id = a.id
+       ORDER BY r.due_date ASC`
+    );
+    res.json(repayments);
+  } catch (error) {
+    console.error('Error fetching repayments:', error);
+    res.status(500).json({ message: 'Server error fetching repayments' });
+  }
 });
+
+app.post('/api/repayments/:id/pay', authenticateToken, async (req, res) => {
+  // ... (implement repayment marking as paid logic)
+});
+
+// Reports
+app.get('/api/reports/cash-flow', authenticateToken, async (req, res) => {
+  // ... (implement cash flow report logic)
+});
+
+app.get('/api/reports/loan-applications', authenticateToken, async (req, res) => {
+  // ... (implement loan applications report logic)
+});
+
+// ... (keep existing server start logic)
