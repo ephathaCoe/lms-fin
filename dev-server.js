@@ -24,14 +24,23 @@ async function createServer() {
   // Start the backend server as a child process on a different port
   const serverProcess = spawn('node', ['server/index.js'], {
     cwd: __dirname,
-    stdio: 'inherit',
-    env: { ...process.env, PORT: 3000 }
+    stdio: ['inherit', 'inherit', 'pipe'] // Change 'inherit' to 'pipe' for stderr
+  });
+
+  // Log backend server output
+  serverProcess.stderr.on('data', (data) => {
+    console.error(`Backend server error: ${data}`);
   });
 
   // Handle server process exit
   serverProcess.on('exit', (code) => {
     console.log(`Backend server exited with code ${code}`);
-    process.exit(code);
+    if (code !== 0) {
+      console.log('Attempting to restart backend server...');
+      createServer();
+    } else {
+      process.exit(code);
+    }
   });
 
   // Handle process termination (Ctrl+C)
